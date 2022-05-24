@@ -8,7 +8,7 @@
 #include <sys/ioctl.h>
 #include <locale.h>
 
-#define ERR(str) { perror(str); err = EXIT_FAILURE; break; }
+#define ERR(str) { perror(str); err = EXIT_FAILURE; goto end; }
 
 int main()
 {
@@ -17,37 +17,52 @@ int main()
 		exit(EXIT_FAILURE);
 	}
 
-	char *ptr = NULL;
+	char *buf = NULL;
 	size_t siz = 0;
-	ssize_t slen;
+	ssize_t len;
 	int err = EXIT_SUCCESS;
 
-	while ((slen = getline(&ptr, &siz, stdin)) > 0) {
-		ptr[slen - 1] = '\0';
-	
-		size_t len = mbstowcs(NULL, ptr, 0);
-		if (len == (size_t) -1) ERR("msbtowcs")
-
-		wchar_t *wcs = calloc(len + 1, sizeof *wcs);
-		if (!wcs) ERR("calloc")
-
-		if (mbstowcs(wcs, ptr, len + 1) == (size_t) -1) ERR("msbtowcs")
-
+	while ((len = getline(&buf, &siz, stdin)) > 0) {
 		struct winsize ws;
 		if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) < 0) ERR("ioctl")
 
-		int trm_width = ws.ws_col;
-		int str_width = wcswidth(wcs, len);
+		int term_width = ws.ws_col;
 
-		free(wcs);
+		char *ptr = buf;
+		char *last = ptr;
+		int str_width = 0;
+		mbstate_t mbs = {0};
 
-		for (int i = (trm_width - str_width) / 2; i > 0; i--)
-			putchar(' ');
-		puts(ptr);
+		while (len > 0) {
+			wchar_t wc;
+
+			size_t adv = mbrtowc(&wc, ptr, len, &mbs);
+			if (adv == (size_t) -1 || adv == (size_t) -2) ERR("mbrtowc")
+
+			ptr += adv;
+			len -= adv;
+
+			int width = wcwidth(wc);
+			if (width > 0)
+				str_width += width;
+
+			if (*ptr == '\n' || str_width >= term_width - 12) {
+				for (int i = (term_width - str_width) / 2; i > 0; i--)
+					putchar(' ');
+				fwrite(last, 1, ptr - last + 1, stdout);
+
+				if (*ptr != '\n')
+					putchar('\n');
+
+				last = ptr + 1;
+				str_width = 0;
+			}
+		}
 	}
 
-	if (ptr)
-		free(ptr);
+	end:
+	if (buf)
+		free(buf);
 
 	return err;
 }
