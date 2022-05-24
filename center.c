@@ -1,12 +1,15 @@
 #define _POSIX_C_SOURCE 200809L
 #define _XOPEN_SOURCE
+#include <fcntl.h>
+#include <locale.h>
 #include <stdio.h>
-#include <wchar.h>
 #include <stdlib.h>
+#include <sys/ioctl.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <termios.h>
 #include <unistd.h>
-#include <sys/ioctl.h>
-#include <locale.h>
+#include <wchar.h>
 
 #define ERR(str) { perror(str); err = EXIT_FAILURE; goto end; }
 
@@ -22,9 +25,15 @@ int main()
 	ssize_t len;
 	int err = EXIT_SUCCESS;
 
+	int tty_fd = open("/dev/tty", O_RDWR);
+	if (tty_fd < 0) {
+		perror("open");
+		return EXIT_FAILURE;
+	}
+
 	while ((len = getline(&buf, &siz, stdin)) > 0) {
 		struct winsize ws;
-		if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) < 0) ERR("ioctl")
+		if (ioctl(tty_fd, TIOCGWINSZ, &ws) < 0) ERR("ioctl")
 
 		int term_width = ws.ws_col;
 
@@ -61,6 +70,8 @@ int main()
 	}
 
 	end:
+	close(tty_fd);
+
 	if (buf)
 		free(buf);
 
