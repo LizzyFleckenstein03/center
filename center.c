@@ -39,9 +39,6 @@ int main()
 			size_t adv = mbrtowc(&wc, ptr, len, &mbs);
 			if (adv == (size_t) -1 || adv == (size_t) -2) ERR("mbrtowc")
 
-			ptr += adv;
-			len -= adv;
-
 			int width = wcwidth(wc);
 			if (width > 0)
 				str_width += width;
@@ -54,9 +51,12 @@ int main()
 				if (*ptr != '\n')
 					putchar('\n');
 
-				last = ptr + 1;
+				last = ptr + adv;
 				str_width = 0;
 			}
+
+			ptr += adv;
+			len -= adv;
 		}
 	}
 
